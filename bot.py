@@ -179,48 +179,17 @@ def get_debug_info() -> str:
 
 def load_accounts() -> list[dict]:
     """
-    Real-time check:
-    1. Container ke tamam mumkina folders (/app/accounts, cwd/accounts, root) scan karta hai.
-    2. GitHub API se bhi scan karta hai.
+    ONLY GitHub API se real-time accounts fetch karta hai.
+    GitHub accounts/ folder = SINGLE source of truth.
+    Jo files GitHub par hain, sirf wohi bot mein nazar aayengi.
+    Local container files ko IGNORE kiya jata hai.
     """
-    seen_names = set()
-    all_accounts: list[dict] = []
-
-    # 1. Tamam possible disk folders check karein
-    search_dirs = [
-        ACCOUNTS_DIR,
-        Path.cwd() / "accounts",
-        Path("/app/accounts"),
-        BASE_DIR,
-        Path.cwd(),
-        Path("/app"),
-    ]
-    for d in search_dirs:
-        try:
-            if d.exists() and d.is_dir():
-                for f in sorted(d.glob("*.txt")):
-                    if f.name.lower() in ["requirements.txt", "license.txt", "readme.txt"]:
-                        continue
-                    if "used_accounts" in str(f).lower():
-                        continue
-                    if f.name not in used_accounts_cache and f.name not in seen_names:
-                        seen_names.add(f.name)
-                        all_accounts.append({
-                            "source": "local",
-                            "path": f,
-                            "name": f.name,
-                        })
-        except Exception:
-            pass
-
-    # 2. GitHub API Live Check
     gh_files = fetch_github_accounts_list()
+    result = []
     for gh in gh_files:
-        if gh["name"] not in seen_names and gh["name"] not in used_accounts_cache:
-            seen_names.add(gh["name"])
-            all_accounts.append(gh)
-
-    return all_accounts
+        if gh["name"] not in used_accounts_cache:
+            result.append(gh)
+    return result
 
 
 def parse_account_text(text: str, filename: str) -> dict | None:
