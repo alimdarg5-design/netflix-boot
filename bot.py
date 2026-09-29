@@ -22,7 +22,7 @@ ACCOUNTS_DIR = BASE_DIR / "accounts"
 USED_DIR     = BASE_DIR / "used_accounts"
 
 GITHUB_REPO  = os.environ.get("GITHUB_REPO", "alimdarg5-design/netflix-boot")
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "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")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 PROXY_URL = os.environ.get("PROXY_URL", "")  # Railway: empty = no proxy
 
@@ -97,13 +97,17 @@ def fetch_github_accounts_list() -> list[dict]:
     if not GITHUB_REPO:
         return []
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/accounts"
-    headers = {"User-Agent": "NetflixBot/1.0"}
-    if GITHUB_TOKEN:
+    headers = {"User-Agent": "Mozilla/5.0"}
+    if GITHUB_TOKEN and not GITHUB_TOKEN.startswith("github_pat_11CH6DGE"):
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
     try:
         with httpx.Client(timeout=10.0) as client:
             resp = client.get(url, headers=headers)
+            # Agar token expire ya invalid ho (401), to bina token ke public fetch karein
+            if resp.status_code == 401:
+                resp = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+
             if resp.status_code == 200:
                 items = resp.json()
                 results = []
@@ -220,7 +224,7 @@ def parse_account_text(text: str, filename: str) -> dict | None:
 
 def delete_from_github(filename: str, sha: str | None = None) -> bool:
     """GitHub repository se file delete karta hai."""
-    if not GITHUB_TOKEN or not GITHUB_REPO:
+    if not GITHUB_TOKEN or GITHUB_TOKEN.startswith("github_pat_11CH6DGE") or not GITHUB_REPO:
         return False
 
     headers = {
