@@ -18,8 +18,9 @@ from telegram.request import HTTPXRequest
 # ──────────────────────────────────────────────
 BOT_TOKEN    = os.environ.get("BOT_TOKEN", "8701108813:AAEO2ghZYnUxSPzSpIQ6LxBdC04N5ptFqk8")
 BASE_DIR     = Path(__file__).parent
-ACCOUNTS_DIR = BASE_DIR / "accounts"
-USED_DIR     = BASE_DIR / "used_accounts"
+ACCOUNTS_FOLDER = os.environ.get("ACCOUNTS_FOLDER", "netflix_accounts")
+ACCOUNTS_DIR    = BASE_DIR / ACCOUNTS_FOLDER
+USED_DIR        = BASE_DIR / "used_accounts"
 
 GITHUB_REPO  = os.environ.get("GITHUB_REPO", "alimdarg5-design/netflix-boot")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
@@ -96,7 +97,7 @@ def fetch_github_accounts_list() -> list[dict]:
     """
     if not GITHUB_REPO:
         return []
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/accounts"
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{ACCOUNTS_FOLDER}"
     headers = {"User-Agent": "Mozilla/5.0"}
     if GITHUB_TOKEN and not GITHUB_TOKEN.startswith("github_pat_11CH6DGE"):
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
@@ -129,50 +130,35 @@ def fetch_github_accounts_list() -> list[dict]:
 
 
 def get_debug_info() -> str:
-    """Railway container ki exact state check karta hai."""
+    """Railway container aur GitHub API ki live status check karta hai."""
     lines = []
-    lines.append(f"📁 CWD: `{Path.cwd()}`")
-    lines.append(f"📁 BASE_DIR: `{BASE_DIR}`")
-    
-    # Check all search directories
-    search_dirs = [
-        ACCOUNTS_DIR,
-        Path.cwd() / "accounts",
-        Path("/app/accounts"),
-        BASE_DIR,
-        Path.cwd(),
-        Path("/app"),
-    ]
-    lines.append("\n*Folder Checks:*")
-    seen_d = set()
-    for d in search_dirs:
-        try:
-            rp = str(d.resolve())
-            if rp in seen_d:
-                continue
-            seen_d.add(rp)
-            if d.exists():
-                txt_count = len(list(d.glob("*.txt")))
-                lines.append(f"• `{d}`: ✅ Exists ({txt_count} txt files)")
-            else:
-                lines.append(f"• `{d}`: ❌ Not found")
-        except Exception as e:
-            lines.append(f"• `{d}`: Error ({e})")
+    lines.append(f"📁 Source: `GitHub Repository Live Scan`")
+    lines.append(f"📦 Repository: `{GITHUB_REPO}`")
+    lines.append(f"📂 Folder: `{ACCOUNTS_FOLDER}`")
+    lines.append(f"🔑 Token: `{'✅ Configured' if GITHUB_TOKEN else '⚠️ Anonymous'}`")
 
     # GitHub API check
-    lines.append("\n*GitHub API Check:*")
+    lines.append("\n*Live GitHub Check:*")
     try:
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/accounts"
-        with httpx.Client(timeout=6.0) as client:
-            resp = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-            lines.append(f"• Status Code: `{resp.status_code}`")
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{ACCOUNTS_FOLDER}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        if GITHUB_TOKEN and not GITHUB_TOKEN.startswith("github_pat_11CH6DGE"):
+            headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code == 401:
+                resp = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+
+            lines.append(f"• API Status: `{resp.status_code}`")
             if resp.status_code == 200:
                 count = len([i for i in resp.json() if i.get("name", "").endswith(".txt")])
-                lines.append(f"• Accounts found via API: `{count}`")
+                lines.append(f"• Live Accounts in `{ACCOUNTS_FOLDER}`: `{count}` file(s)")
+            elif resp.status_code == 404:
+                lines.append(f"• Folder `{ACCOUNTS_FOLDER}` GitHub par empty ya banaya nahi gaya.")
             else:
-                lines.append(f"• API response: `{resp.text[:120]}`")
+                lines.append(f"• Response: `{resp.text[:120]}`")
     except Exception as e:
-        lines.append(f"• API fetch error: `{e}`")
+        lines.append(f"• Fetch Error: `{e}`")
 
     return "\n".join(lines)
 
@@ -256,7 +242,7 @@ def delete_from_github(filename: str, sha: str | None = None) -> bool:
         "User-Agent": "NetflixBot/1.0",
     }
 
-    candidates = [f"accounts/{filename}", filename]
+    candidates = [f"{ACCOUNTS_FOLDER}/{filename}", f"accounts/{filename}", filename]
     for rel_path in candidates:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{rel_path}"
         try:
