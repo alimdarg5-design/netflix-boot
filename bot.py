@@ -2,7 +2,6 @@ import os
 import re
 import asyncio
 import logging
-from datetime import datetime, timedelta
 from pathlib import Path
 import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -18,7 +17,8 @@ from telegram.request import HTTPXRequest
 #  CONFIG
 # ──────────────────────────────────────────────
 BOT_TOKEN    = os.environ.get("BOT_TOKEN", "8701108813:AAEO2ghZYnUxSPzSpIQ6LxBdC04N5ptFqk8")
-ACCOUNTS_DIR = Path(__file__).parent / "accounts"   # accounts/ subfolder
+BASE_DIR     = Path(__file__).parent
+ACCOUNTS_DIR = BASE_DIR / "accounts"
 
 PROXY_URL = os.environ.get("PROXY_URL", "")  # Railway: empty = no proxy
 
@@ -36,21 +36,18 @@ log = logging.getLogger(__name__)
 # ──────────────────────────────────────────────
 #  STATE
 # ──────────────────────────────────────────────
+# user_state[user_id] = {"waiting_status": bool}
 user_state: dict[int, dict] = {}
 
 
 # ──────────────────────────────────────────────
-#  ANIMATION  (typing-style "dots" effect)
+#  ANIMATION (typing-style loading effect)
 # ──────────────────────────────────────────────
 async def animate_generating(chat_id: int, bot) -> int:
-    """
-    Send a 'Generating...' animation message (3 steps) and return its message_id.
-    Simulates a typing / loading effect.
-    """
     frames = [
         "⚙️ *Generating*`  .`",
-        "⚙️ *Generating*`  ..`",
-        "⚙️ *Generating*`  ...`",
+        "⚙️ *Checking Stock...*`  ..`",
+        "⚙️ *Fetching VIP Account...*`  ...`",
         f"✨ *{VIP_TAG}  Account Ready!*",
     ]
     msg = await bot.send_message(
@@ -59,7 +56,7 @@ async def animate_generating(chat_id: int, bot) -> int:
         parse_mode="Markdown",
     )
     for frame in frames[1:]:
-        await asyncio.sleep(0.55)
+        await asyncio.sleep(0.5)
         try:
             await bot.edit_message_text(
                 chat_id=chat_id,
@@ -69,7 +66,7 @@ async def animate_generating(chat_id: int, bot) -> int:
             )
         except Exception:
             pass
-    await asyncio.sleep(0.4)
+    await asyncio.sleep(0.3)
     return msg.message_id
 
 
@@ -84,47 +81,95 @@ def dev_footer() -> str:
 
 
 # ──────────────────────────────────────────────
-#  HELPERS
+#  HELPERS (REAL-TIME FILE CHECK & AUTO-DELETE)
 # ──────────────────────────────────────────────
 def load_accounts() -> list[Path]:
-    files = sorted(ACCOUNTS_DIR.glob("*.txt"))
-    return files
+    """
+    Real-time check: accounts/ folder aur root directory dono scan karta hai.
+    """
+    found: list[Path] = []
+
+    # 1. accounts/ subfolder check
+    if ACCOUNTS_DIR.exists():
+        found.extend(ACCOUNTS_DIR.glob("*.txt"))
+
+    # 2. Root directory check (agar user ne direct root pe upload ki hon)
+    for f in BASE_DIR.glob("*.txt"):
+        if f.name.lower() not in ["requirements.txt", "license.txt", "readme.txt"]:
+            found.append(f)
+
+    # Deduplicate by resolve path & sort
+    seen = set()
+    unique_files: list[Path] = []
+    for f in sorted(found, key=lambda x: x.name):
+        try:
+            res = f.resolve()
+            if res not in seen and f.is_file():
+                seen.add(res)
+                unique_files.append(f)
+        except Exception:
+            pass
+
+    return unique_files
 
 
 def parse_account(path: Path) -> dict | None:
-    text = path.read_text(encoding="utf-8", errors="ignore")
-
-    pc_url     = re.search(r"PC Login:\s*\n(https?://\S+)",     text)
-    mobile_url = re.search(r"Mobile Login:\s*\n(https?://\S+)", text)
-    tv_url     = re.search(r"TV Login:\s*\n(https?://\S+)",     text)
-
-    if not any([pc_url, mobile_url, tv_url]):
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except Exception as e:
+        log.error(f"File parhne mein masla {path.name}: {e}")
         return None
 
-    title_match = re.search(r"PREMIUM ACCOUNT #(\d+)", text)
-    plan_match  = re.search(r"Plan:\s*(.+)",  text)
-    email_match = re.search(r"Email:\s*(.+)", text)
+    # Flexible regex for URLs (handles spaces, newlines, CRLF)
+    pc_url     = re.search(r"PC Login:\s*[\r\n]+(https?://\S+)",     text, re.IGNORECASE)
+    mobile_url = re.search(r"Mobile Login:\s*[\r\n]+(https?://\S+)", text, re.IGNORECASE)
+    tv_url     = re.search(r"TV Login:\s*[\r\n]+(https?://\S+)",     text, re.IGNORECASE)
 
-    title = f"Account #{title_match.group(1)}" if title_match else path.stem
+    # Fallback: agar headers na hon direct links hon
+    if not any([pc_url, mobile_url, tv_url]):
+        urls = re.findall(r"(https?://www\.netflix\.com/\S+)", text)
+        if urls:
+            pc_link     = urls[0]
+            mobile_link = urls[1] if len(urls) > 1 else None
+            tv_link     = urls[2] if len(urls) > 2 else None
+        else:
+            return None
+    else:
+        pc_link     = pc_url.group(1).strip()     if pc_url     else None
+        mobile_link = mobile_url.group(1).strip() if mobile_url else None
+        tv_link     = tv_url.group(1).strip()     if tv_url     else None
+
+    title_match = re.search(r"PREMIUM ACCOUNT #(\d+)", text, re.IGNORECASE)
+    plan_match  = re.search(r"Plan:\s*(.+)",  text, re.IGNORECASE)
+    email_match = re.search(r"Email:\s*(.+)", text, re.IGNORECASE)
+
+    title = f"Account #{title_match.group(1)}" if title_match else path.stem.replace("_", " ")
 
     return {
         "title":      title,
-        "plan":       plan_match.group(1).strip()  if plan_match  else "Unknown",
+        "plan":       plan_match.group(1).strip()  if plan_match  else "Standard",
         "email":      email_match.group(1).strip() if email_match else "Unknown",
-        "pc_url":     pc_url.group(1).strip()      if pc_url      else None,
-        "mobile_url": mobile_url.group(1).strip()  if mobile_url  else None,
-        "tv_url":     tv_url.group(1).strip()      if tv_url      else None,
+        "pc_url":     pc_link,
+        "mobile_url": mobile_link,
+        "tv_url":     tv_link,
         "file":       path.name,
     }
+
+
+def delete_account_file(path: Path):
+    """File generate hone ke baad foran delete karta hai taake dubara repeat na ho."""
+    try:
+        if path.exists():
+            path.unlink()
+            log.info(f"✅ Used file deleted successfully: {path.name}")
+    except Exception as e:
+        log.warning(f"⚠️ Could not delete file {path.name}: {e}")
 
 
 def get_user_state(user_id: int) -> dict:
     if user_id not in user_state:
         user_state[user_id] = {
-            "queue":          [],
-            "index":          0,
-            "waiting_status": False,  # True = status click ka intezaar
-            "status_msg":     None,
+            "waiting_status": False,
         }
     return user_state[user_id]
 
@@ -153,7 +198,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         intro_frames[0], parse_mode="Markdown"
     )
     for frame in intro_frames[1:]:
-        await asyncio.sleep(0.6)
+        await asyncio.sleep(0.5)
         try:
             await bot.edit_message_text(
                 chat_id=chat_id,
@@ -164,31 +209,30 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(0.5)
 
-    # ── 2. Load queue ─────────────────────────
+    # ── 2. Real-time file count ───────────────
     files = load_accounts()
-    if not files:
+    stock = len(files)
+    state["waiting_status"] = False
+
+    if stock == 0:
         await update.message.reply_text(
-            "⚠️ *Koi account file nahi mili!*\n"
-            "Bot folder mein `.txt` account files rakhein."
+            "⚠️ *Filhal koi account available nahi hai!*\n\n"
+            "📦 *Available Stock:* `0`\n"
+            "Jald nayi accounts upload kiye jayenge."
             + dev_footer(),
             parse_mode="Markdown",
         )
         return
 
-    state["queue"]          = files
-    state["index"]          = 0
-    state["waiting_status"] = False
-    state["status_msg"]     = None
-
     keyboard = [[InlineKeyboardButton("🎁 Generate VIP Account", callback_data="generate")]]
     await update.message.reply_text(
         f"👋 *Assalam-o-Alaikum {user.first_name}!*\n\n"
         f"🎬 {VIP_TAG} *Netflix Bot mein Khush Aamdeed!*\n\n"
-        f"🗂 *{len(files)}* VIP account file(s) ready hain.\n\n"
+        f"📦 *Total Stock:* *{stock}* VIP account file(s) available hain.\n\n"
         "⬇️ Neeche button dabayein aur apna Netflix account hasil karein!\n\n"
-        "⏱ _Note: Har account ke baad 2 minute wait karna hoga._"
+        "💡 _Note: Har account ke baad Working / Not Working status batana zaroori hai agla account lene ke liye._"
         + dev_footer(),
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard),
@@ -199,8 +243,11 @@ async def cmd_reset(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id in user_state:
         del user_state[user.id]
+    stock = len(load_accounts())
     await update.message.reply_text(
-        "🔄 *Queue reset ho gayi!*\n/start dabayein dobara shuru karne ke liye."
+        f"🔄 *System reset ho gaya!*\n\n"
+        f"📦 *Current Stock:* *{stock}* file(s)\n"
+        "/start dabayein dobara shuru karne ke liye."
         + dev_footer(),
         parse_mode="Markdown",
     )
@@ -218,86 +265,91 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     bot     = ctx.bot
     chat_id = query.message.chat_id
 
-    # ── 1. Check: status feedback ka intezaar hai? ───────
+    # ── 1. Check: Pehle status feedback ka intezaar hai? ──
     if state.get("waiting_status", False):
         await query.edit_message_text(
-            "⚠️ *Pehle account ka status batayein!*\n\n"
+            "⚠️ *Pehle pichlay account ka status batayein!*\n\n"
             "Neeche wale message mein\n"
-            "✅ *Working* ya ❌ *Not Working* click karein\n\n"
-            "_Uske baad agla account generate ho ga._"
+            "✅ *Working* ya ❌ *Not Working* click karein.\n\n"
+            "_Uske baad agla VIP account generate ho sakega._"
             + dev_footer(),
             parse_mode="Markdown",
         )
         return
 
-    # ── 2. Queue check ────────────────────────
-    if not state["queue"] or state["index"] >= len(state["queue"]):
-        files = load_accounts()
-        if not files:
-            await query.edit_message_text(
-                "😢 *Tamam VIP accounts khatam ho gaye!*\n\n"
-                "Jaldi nayi files add ki jayengi."
-                + dev_footer(),
-                parse_mode="Markdown",
-            )
-            return
-        state["queue"] = files
-        state["index"] = 0
-
-    # ── 3. Run animation ──────────────────────
-    anim_id = await animate_generating(chat_id, bot)
-
-    # ── 4. Parse account ──────────────────────
-    idx  = state["index"]
-    path = state["queue"][idx]
-    acc  = parse_account(path)
-
-    if acc is None:
-        state["index"] += 1
-        try:
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=anim_id,
-                text=f"⚠️ File `{path.name}` parse nahi hui, skip..."
-                + dev_footer(),
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🎁 Try Again", callback_data="generate")]]
-                ),
-            )
-        except Exception:
-            pass
+    # ── 2. Real-time file check ────────────────────────
+    files = load_accounts()
+    if not files:
+        await query.edit_message_text(
+            "😢 *Tamam VIP accounts khatam ho gaye!*\n\n"
+            "📦 *Available Stock:* `0`\n\n"
+            "Jaldi nayi files add ki jayengi, thora intezaar karein."
+            + dev_footer(),
+            parse_mode="Markdown",
+        )
         return
 
-    state["index"]          += 1
-    state["waiting_status"]  = True   # status ka intezaar shuru
-    state["status_msg"]      = None
+    # ── 3. Run animation ──────────────────────────────
+    anim_id = await animate_generating(chat_id, bot)
 
-    # ── 5. Build login buttons ─────────────────
+    # ── 4. Find valid account & Auto-delete ─────────────
+    acc = None
+    target_path = None
+
+    while files:
+        candidate = files.pop(0)
+        parsed = parse_account(candidate)
+        if parsed:
+            acc = parsed
+            target_path = candidate
+            break
+        else:
+            # Corrupted / invalid file — remove so it doesn't block future generations
+            log.warning(f"Skipping and deleting invalid file: {candidate.name}")
+            delete_account_file(candidate)
+
+    if not acc or not target_path:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=anim_id,
+            text=(
+                "😢 *Tamam accounts khatam ya invalid niklay!*\n\n"
+                "Nayi files add hote hi dobara try karein."
+                + dev_footer()
+            ),
+            parse_mode="Markdown",
+        )
+        return
+
+    # Delete the used file immediately so it NEVER repeats!
+    delete_account_file(target_path)
+
+    # Real-time stock count remaining after this generation
+    remaining_stock = len(load_accounts())
+
+    # Set waiting status for this user
+    state["waiting_status"] = True
+
+    # ── 5. Build login buttons ─────────────────────────
     login_buttons = []
     if acc["pc_url"]:
-        login_buttons.append(
-            [InlineKeyboardButton("💻 PC Login", url=acc["pc_url"])]
-        )
+        login_buttons.append([InlineKeyboardButton("💻 PC Login", url=acc["pc_url"])])
     if acc["tv_url"]:
-        login_buttons.append(
-            [InlineKeyboardButton("📺 TV Login", url=acc["tv_url"])]
-        )
+        login_buttons.append([InlineKeyboardButton("📺 TV Login", url=acc["tv_url"])])
     if acc["mobile_url"]:
-        login_buttons.append(
-            [InlineKeyboardButton("📱 Mobile Login", url=acc["mobile_url"])]
-        )
+        login_buttons.append([InlineKeyboardButton("📱 Mobile Login", url=acc["mobile_url"])])
 
-    # ── 6. Edit animation msg → account card ──
+    # ── 6. Send Account Card with Stock Info ───────────
     try:
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=anim_id,
             text=(
                 f"🎉 *{VIP_TAG}  {acc['title']} Generated!*\n\n"
+                f"📦 *Peche Baaki Files (Stock):* `{remaining_stock}` file(s)\n\n"
                 f"📋 *Plan:* `{acc['plan']}`\n"
                 f"📧 *Email:* `{acc['email']}`\n\n"
-                "🔗 *Login karne ke liye neeche click karein:*"
+                "🔗 *Login karne ke liye neeche button per click karein:*"
                 + dev_footer()
             ),
             parse_mode="Markdown",
@@ -306,7 +358,7 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.warning(f"Account card edit error: {e}")
 
-    # ── 7. Send status check message ──────────
+    # ── 7. Send Status Check Message ───────────────────
     status_keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ Working",     callback_data=f"status_working_{user.id}"),
@@ -314,22 +366,19 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ]
     ])
 
-    status_msg = await bot.send_message(
+    await bot.send_message(
         chat_id=chat_id,
         text=(
             "━━━━━━━━━━━━━━━━━━━━\n"
             "📊 *Account Status Check*\n\n"
+            f"📦 Baaki Stock: *{remaining_stock}* accounts\n"
             "Kya yeh VIP account kaam kar raha hai?\n\n"
-            "_Status click karne ke baad agla account generate kar sakte ho!_"
+            "_Status click karne ke foran baad agla account generate kar sakte ho!_"
             + dev_footer()
         ),
         parse_mode="Markdown",
         reply_markup=status_keyboard,
     )
-    state["status_msg"] = status_msg.message_id
-
-
-# (countdown task hata diya — ab status click pe next account milega)
 
 
 # ──────────────────────────────────────────────
@@ -349,7 +398,7 @@ async def cb_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     else:
         icon = "❌"
         text = "Not Working"
-        msg  = "Shukria feedback ke liye! Hum jald check karenge. 🔧"
+        msg  = "Shukria feedback ke liye! Next account try karein. 🔧"
 
     user  = query.from_user
     state = get_user_state(user.id)
@@ -357,14 +406,15 @@ async def cb_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # ── Lock hatao — ab agla account generate ho sakta hai ──
     state["waiting_status"] = False
 
-    left_q = len(state["queue"]) - state["index"]
+    # Real time stock count
+    remaining_stock = len(load_accounts())
 
     await query.edit_message_text(
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"{icon} *Status: {text}*\n\n"
         f"{msg}\n\n"
         f"🟢 Ab agla VIP account generate kar sakte ho!\n"
-        f"📦 Queue mein baaki: *{left_q}* account(s)"
+        f"📦 *Peche Baaki Stock:* `{remaining_stock}` file(s)"
         + dev_footer(),
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(
