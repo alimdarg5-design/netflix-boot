@@ -19,6 +19,10 @@ from telegram.request import HTTPXRequest
 BOT_TOKEN    = os.environ.get("BOT_TOKEN", "8701108813:AAEO2ghZYnUxSPzSpIQ6LxBdC04N5ptFqk8")
 BASE_DIR     = Path(__file__).parent
 ACCOUNTS_DIR = BASE_DIR / "accounts"
+USED_DIR     = BASE_DIR / "used_accounts"
+
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "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")
+GITHUB_REPO  = os.environ.get("GITHUB_REPO", "alimdarg5-design/netflix-boot")
 
 PROXY_URL = os.environ.get("PROXY_URL", "")  # Railway: empty = no proxy
 
@@ -98,13 +102,13 @@ def load_accounts() -> list[Path]:
         if f.name.lower() not in ["requirements.txt", "license.txt", "readme.txt"]:
             found.append(f)
 
-    # Deduplicate by resolve path & sort
+    # Deduplicate by resolve path & sort (used_accounts folder ko exclude karein)
     seen = set()
     unique_files: list[Path] = []
     for f in sorted(found, key=lambda x: x.name):
         try:
             res = f.resolve()
-            if res not in seen and f.is_file():
+            if "used_accounts" not in str(res).lower() and res not in seen and f.is_file():
                 seen.add(res)
                 unique_files.append(f)
         except Exception:
@@ -171,14 +175,73 @@ def parse_account(path: Path) -> dict | None:
     }
 
 
+def delete_from_github(file_path: Path) -> bool:
+    """
+    GitHub repository se file automatically delete karta hai via GitHub REST API.
+    """
+    token = os.environ.get("GITHUB_TOKEN", GITHUB_TOKEN)
+    repo  = os.environ.get("GITHUB_REPO", GITHUB_REPO)
+    if not token or not repo:
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "NetflixBot/1.0",
+    }
+
+    # accounts/filename.txt ya direct filename.txt dono check karega
+    candidates = [f"accounts/{file_path.name}", file_path.name]
+    for rel_path in candidates:
+        url = f"https://api.github.com/repos/{repo}/contents/{rel_path}"
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.get(url, headers=headers)
+                if res.status_code == 200:
+                    sha = res.json().get("sha")
+                    del_res = client.request(
+                        "DELETE",
+                        url,
+                        headers=headers,
+                        json={
+                            "message": f"🤖 Auto-delete used account: {file_path.name}",
+                            "sha": sha,
+                        },
+                    )
+                    if del_res.status_code in [200, 204]:
+                        log.info(f"✅ GitHub se file auto-delete ho gayi: {rel_path}")
+                        return True
+                    else:
+                        log.warning(f"⚠️ GitHub delete error ({del_res.status_code}): {del_res.text}")
+        except Exception as e:
+            log.error(f"GitHub delete API call error: {e}")
+    return False
+
+
 def delete_account_file(path: Path):
-    """File generate hone ke baad foran delete karta hai taake dubara repeat na ho."""
+    """
+    File generate hone ke baad:
+    1. GitHub repository se auto-delete karta hai.
+    2. Local mein used_accounts/ folder mein move karta hai (taake dobara pick na ho).
+    """
+    # 1. GitHub API se delete
+    delete_from_github(path)
+
+    # 2. Local move to used_accounts/
     try:
+        import shutil
+        USED_DIR.mkdir(parents=True, exist_ok=True)
+        dest = USED_DIR / path.name
         if path.exists():
-            path.unlink()
-            log.info(f"✅ Used file deleted successfully: {path.name}")
+            shutil.move(str(path), str(dest))
+            log.info(f"✅ File moved to used_accounts: {path.name}")
     except Exception as e:
-        log.warning(f"⚠️ Could not delete file {path.name}: {e}")
+        log.warning(f"File move fail hua, direct unlink: {e}")
+        try:
+            if path.exists():
+                path.unlink()
+        except Exception:
+            pass
 
 
 def get_user_state(user_id: int) -> dict:
@@ -361,7 +424,8 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             message_id=anim_id,
             text=(
                 f"🎉 *{VIP_TAG}  {acc['title']} Generated!*\n\n"
-                f"📦 *Peche Baaki Files (Stock):* `{remaining_stock}` file(s)\n\n"
+                f"📦 *Peche Baaki Files (Stock):* `{remaining_stock}` file(s)\n"
+                f"📁 *Processed File:* `{acc['file']}`\n\n"
                 f"📋 *Plan:* `{acc['plan']}`\n"
                 f"📧 *Email:* `{acc['email']}`\n\n"
                 "🔗 *Login karne ke liye neeche button per click karein:*\n\n"
