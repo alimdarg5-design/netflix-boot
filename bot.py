@@ -120,24 +120,39 @@ def parse_account(path: Path) -> dict | None:
         log.error(f"File parhne mein masla {path.name}: {e}")
         return None
 
-    # Flexible regex for URLs (handles spaces, newlines, CRLF)
-    pc_url     = re.search(r"PC Login:\s*[\r\n]+(https?://\S+)",     text, re.IGNORECASE)
-    mobile_url = re.search(r"Mobile Login:\s*[\r\n]+(https?://\S+)", text, re.IGNORECASE)
-    tv_url     = re.search(r"TV Login:\s*[\r\n]+(https?://\S+)",     text, re.IGNORECASE)
+    # Flexible regex for URLs (supports PC Login, PC Link, Mobile Login, Mobile Link, TV Login, TV Link)
+    pc_url     = re.search(r"(?:💻\s*)?PC\s*(?:Login|Link)?\s*[:=\-]?\s*(https?://\S+)", text, re.IGNORECASE)
+    mobile_url = re.search(r"(?:📱\s*)?Mobile\s*(?:Login|Link)?\s*[:=\-]?\s*(https?://\S+)", text, re.IGNORECASE)
+    tv_url     = re.search(r"(?:📺\s*)?TV\s*(?:Login|Link)?\s*[:=\-]?\s*(https?://\S+)", text, re.IGNORECASE)
 
-    # Fallback: agar headers na hon direct links hon
-    if not any([pc_url, mobile_url, tv_url]):
-        urls = re.findall(r"(https?://www\.netflix\.com/\S+)", text)
-        if urls:
+    pc_link     = pc_url.group(1).strip()     if pc_url     else None
+    mobile_link = mobile_url.group(1).strip() if mobile_url else None
+    tv_link     = tv_url.group(1).strip()     if tv_url     else None
+
+    # Fallback: agar specific labels na hon lekin Netflix links hon
+    if not any([pc_link, mobile_link, tv_link]):
+        urls = re.findall(r"(https?://\S+netflix\.com/\S+)", text, re.IGNORECASE)
+        if not urls:
+            urls = re.findall(r"(https?://\S+)", text)
+        for u in urls:
+            u_clean = u.strip()
+            if "tv8" in u_clean or "/tv" in u_clean:
+                if not tv_link:
+                    tv_link = u_clean
+            elif "unsupported" in u_clean or "mobile" in u_clean:
+                if not mobile_link:
+                    mobile_link = u_clean
+            elif "browse" in u_clean:
+                if not pc_link:
+                    pc_link = u_clean
+
+        if not any([pc_link, mobile_link, tv_link]) and urls:
             pc_link     = urls[0]
             mobile_link = urls[1] if len(urls) > 1 else None
             tv_link     = urls[2] if len(urls) > 2 else None
-        else:
-            return None
-    else:
-        pc_link     = pc_url.group(1).strip()     if pc_url     else None
-        mobile_link = mobile_url.group(1).strip() if mobile_url else None
-        tv_link     = tv_url.group(1).strip()     if tv_url     else None
+
+    if not any([pc_link, mobile_link, tv_link]):
+        return None
 
     title_match = re.search(r"PREMIUM ACCOUNT #(\d+)", text, re.IGNORECASE)
     plan_match  = re.search(r"Plan:\s*(.+)",  text, re.IGNORECASE)
@@ -349,7 +364,8 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 f"📦 *Peche Baaki Files (Stock):* `{remaining_stock}` file(s)\n\n"
                 f"📋 *Plan:* `{acc['plan']}`\n"
                 f"📧 *Email:* `{acc['email']}`\n\n"
-                "🔗 *Login karne ke liye neeche button per click karein:*"
+                "🔗 *Login karne ke liye neeche button per click karein:*\n\n"
+                "🌐 _Tip: Agar link Telegram ke andar open ho, to upar 3 dots dabakar 'Open in Chrome' karein ya Telegram Settings se In-App Browser OFF kar dein._"
                 + dev_footer()
             ),
             parse_mode="Markdown",
