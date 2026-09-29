@@ -1,0 +1,28 @@
+==================================
+PREMIUM ACCOUNT #10
+
+==================================
+Email: Unknown
+Country: Unknown
+Plan: Standard
+Price: Unknown
+Member Since: Unknown
+Next Billing: Unknown
+Payment: Unknown
+Card: Unknown
+Phone: Unknown
+
+💻 PC Login:
+https://www.netflix.com/browse?nftoken=Bgiqv+vcAxLCAerUaJRfQjOteU43qOUKNISOfORmnt8/sJhYE7k3IlyG2z68fiI4avGRPFzFfEdaYcRAmeNXt+r1MNzJvcwchLylO5vuxePUIHYPm1wAwo3uI9HVqivTa1l8TblyFect+EaeX5AUshPrFNDq4FN7Fz2xHJfyOdXn3zR2kNBM6dj1ZkYOL2PcJRjfaOyJEfVrJQ5PXwnrnt9R1srmnqMmSzkfuSdutRALTCHnFBT7HCgQHOJQCeYxUdQPeWABragwhVkuGAYiDgoM2CdogQA5qbXj5G42
+
+📱 Mobile Login:
+https://www.netflix.com/unsupported?nftoken=Bgiqv+vcAxLCAerUaJRfQjOteU43qOUKNISOfORmnt8/sJhYE7k3IlyG2z68fiI4avGRPFzFfEdaYcRAmeNXt+r1MNzJvcwchLylO5vuxePUIHYPm1wAwo3uI9HVqivTa1l8TblyFect+EaeX5AUshPrFNDq4FN7Fz2xHJfyOdXn3zR2kNBM6dj1ZkYOL2PcJRjfaOyJEfVrJQ5PXwnrnt9R1srmnqMmSzkfuSdutRALTCHnFBT7HCgQHOJQCeYxUdQPeWABragwhVkuGAYiDgoM2CdogQA5qbXj5G42
+
+📺 TV Login:
+https://www.netflix.com/tv8?nftoken=Bgiqv+vcAxLCAerUaJRfQjOteU43qOUKNISOfORmnt8/sJhYE7k3IlyG2z68fiI4avGRPFzFfEdaYcRAmeNXt+r1MNzJvcwchLylO5vuxePUIHYPm1wAwo3uI9HVqivTa1l8TblyFect+EaeX5AUshPrFNDq4FN7Fz2xHJfyOdXn3zR2kNBM6dj1ZkYOL2PcJRjfaOyJEfVrJQ5PXwnrnt9R1srmnqMmSzkfuSdutRALTCHnFBT7HCgQHOJQCeYxUdQPeWABragwhVkuGAYiDgoM2CdogQA5qbXj5G42
+
+# Netscape HTTP Cookie File
+.netflix.com	TRUE	/	FALSE	1806164863	NetflixId	ct%3DBgjHlOvcAxKQBPAjBKY4jenBGevk1Mk2q1Zz7dEKQZSA4lClYXDa6aDU9FeYVmlAvf1iZ9SKFT5eQm3s4pQaYB3tKMtAS0GbRAIkg1onkLOrRn1v83_B3XIAnp_iIriRByTjrS6ALtRtIXWSB7fGZAqiJYZf_JslVvVp8hvawaDIRs3jsMKuF_M4TQpE7f_uQTFyopN7PVtzLieMZDkqYjXKMQuP6ieF76HNkJEHhr62vl0mZAOu-ntcGJ93pD10syoMSbtFzMElER5Zv1vzRi6S4LKg37AAx6WHKfxmcbuFVsAoSK8w9eYKkR9dqT7cVTBEA509k7M2y0CcmOx2HCvkAvv96B2gURRniN-37ReMQb33kM7QCL9NxVCz_ZQ6ge5Ao2PhgaFNB82h8t0JfAtaZwrhnAVexodrd1Xo6vW4-M5zpIuXwClGtWa9reaIvw6os5vPssmZW_PsjJj2V6h0YoH2TIPD85SDK6YOjFeU-nQvYNam3_oUYaVR4d40BCWYVhjxnq7QfgbkAQbKO6hvXnT8byluNHSMBkw0zR9JM5tajHrWdkRne7Z93Y1-smMrQjiqRntAp3QQIy3rYwpc-7PSmCK9qwJMg1AtPLADU8ZZ0M0fLn2GVyCG1TINGyPU1GOVYOy5Lb5MwvMlo1ICH7ezh_MsaJpqByIbXL1hhCBwIdhgf5ngX1Ldbo3CWDfD-y6IlztqsBgGIg4KDCzbqNXUBr3HMi9Haw..%26ch%3DAQEAEAABABR_gKTXIPb2rHeKUzUasCoYy4e02bY8NzQ.%26v%3D3%26pg%3DKEXVPPYUSVGXVK5OSS5ADVQXIM
+.netflix.com	TRUE	/	FALSE	1806164863	nfvdid	BQFmAAEBEAuSQB5ftejU-le8siSkCfxgvrnA-4PQYDy2mXYXyOVsxDDoJdsAxLHzin3kUBWMmwhf-ff_72kptkMg0_Rk42b33GobTSUXAD_q7D05YnAEHiG-c3aH8eoCPtxWNCHMITcglyoLI0Ugd91K-egKc_rY
+.netflix.com	TRUE	/	FALSE	1806164863	SecureNetflixId	v%3D3%26mac%3DAQEAEQABABQi-QJH2_cjOex2ojbduee0vkVOZazWn3g.%26dt%3D1789361524073
+.netflix.com	TRUE	/	FALSE	1806164863	OptanonConsent	isGpcEnabled=0&datestamp=Mon+Sep+14+2026+17%3A49%3A02+GMT%2B0530+(India+Standard+Time)&version=202607.1.0&browserGpcFlag=0&isDntEnabled=0&isIABGlobal=false&hosts=&consentId=29e1567c-fcbc-4386-96d4-fdb22ec630f2&interactionCount=0&isAnonUser=1&prevHadToken=0&landingPath=NotLandingPage&groups=C0001%3A1%2CC0002%3A1%2CC0003%3A1%2CC0004%3A1&AwaitingReconsent=false
