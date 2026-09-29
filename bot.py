@@ -128,38 +128,92 @@ def fetch_github_accounts_list() -> list[dict]:
     return []
 
 
+def get_debug_info() -> str:
+    """Railway container ki exact state check karta hai."""
+    lines = []
+    lines.append(f"📁 CWD: `{Path.cwd()}`")
+    lines.append(f"📁 BASE_DIR: `{BASE_DIR}`")
+    
+    # Check all search directories
+    search_dirs = [
+        ACCOUNTS_DIR,
+        Path.cwd() / "accounts",
+        Path("/app/accounts"),
+        BASE_DIR,
+        Path.cwd(),
+        Path("/app"),
+    ]
+    lines.append("\n*Folder Checks:*")
+    seen_d = set()
+    for d in search_dirs:
+        try:
+            rp = str(d.resolve())
+            if rp in seen_d:
+                continue
+            seen_d.add(rp)
+            if d.exists():
+                txt_count = len(list(d.glob("*.txt")))
+                lines.append(f"• `{d}`: ✅ Exists ({txt_count} txt files)")
+            else:
+                lines.append(f"• `{d}`: ❌ Not found")
+        except Exception as e:
+            lines.append(f"• `{d}`: Error ({e})")
+
+    # GitHub API check
+    lines.append("\n*GitHub API Check:*")
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/accounts"
+        with httpx.Client(timeout=6.0) as client:
+            resp = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            lines.append(f"• Status Code: `{resp.status_code}`")
+            if resp.status_code == 200:
+                count = len([i for i in resp.json() if i.get("name", "").endswith(".txt")])
+                lines.append(f"• Accounts found via API: `{count}`")
+            else:
+                lines.append(f"• API response: `{resp.text[:120]}`")
+    except Exception as e:
+        lines.append(f"• API fetch error: `{e}`")
+
+    return "\n".join(lines)
+
+
 def load_accounts() -> list[dict]:
     """
     Real-time check:
-    1. Local container ke accounts/ aur root directory scan karta hai.
-    2. GitHub API se bhi scan karta hai (taake agar Railway pe deploy late ho to direct GitHub se mil jaye).
+    1. Container ke tamam mumkina folders (/app/accounts, cwd/accounts, root) scan karta hai.
+    2. GitHub API se bhi scan karta hai.
     """
     seen_names = set()
     all_accounts: list[dict] = []
 
-    # 1. Local subfolder check
-    if ACCOUNTS_DIR.exists():
-        for f in sorted(ACCOUNTS_DIR.glob("*.txt")):
-            if f.name not in used_accounts_cache and "used_accounts" not in str(f).lower():
-                seen_names.add(f.name)
-                all_accounts.append({
-                    "source": "local",
-                    "path": f,
-                    "name": f.name,
-                })
+    # 1. Tamam possible disk folders check karein
+    search_dirs = [
+        ACCOUNTS_DIR,
+        Path.cwd() / "accounts",
+        Path("/app/accounts"),
+        BASE_DIR,
+        Path.cwd(),
+        Path("/app"),
+    ]
+    for d in search_dirs:
+        try:
+            if d.exists() and d.is_dir():
+                for f in sorted(d.glob("*.txt")):
+                    if f.name.lower() in ["requirements.txt", "license.txt", "readme.txt"]:
+                        continue
+                    if "used_accounts" in str(f).lower():
+                        continue
+                    if f.name not in used_accounts_cache and f.name not in seen_names:
+                        seen_names.add(f.name)
+                        all_accounts.append({
+                            "source": "local",
+                            "path": f,
+                            "name": f.name,
+                        })
+        except Exception:
+            pass
 
-    # 2. Local root folder check
-    for f in sorted(BASE_DIR.glob("*.txt")):
-        if f.name.lower() not in ["requirements.txt", "license.txt", "readme.txt"]:
-            if f.name not in used_accounts_cache and f.name not in seen_names:
-                seen_names.add(f.name)
-                all_accounts.append({
-                    "source": "local",
-                    "path": f,
-                    "name": f.name,
-                })
-
-    # 3. GitHub API Live Check (Backup/Direct sync)
+    # 2. GitHub API Live Check
     gh_files = fetch_github_accounts_list()
     for gh in gh_files:
         if gh["name"] not in seen_names and gh["name"] not in used_accounts_cache:
@@ -339,10 +393,13 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     state["waiting_status"] = False
 
     if stock == 0:
+        diag = get_debug_info()
         await update.message.reply_text(
             "⚠️ *Filhal koi account available nahi hai!*\n\n"
-            "📦 *Available Stock:* `0`\n"
-            "Jald nayi accounts upload kiye jayenge."
+            "📦 *Available Stock:* `0`\n\n"
+            "🔍 *Server Diagnostics Info:*\n"
+            f"{diag}\n\n"
+            "_Yeh info check karke hume bataein taake foran solve ho sake._"
             + dev_footer(),
             parse_mode="Markdown",
         )
@@ -371,6 +428,14 @@ async def cmd_reset(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"📦 *Current Stock:* *{stock}* file(s)\n"
         "/start dabayein dobara shuru karne ke liye."
         + dev_footer(),
+        parse_mode="Markdown",
+    )
+
+
+async def cmd_debug(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    diag = get_debug_info()
+    await update.message.reply_text(
+        f"🛠 *Diagnostic Debug Report*\n\n{diag}" + dev_footer(),
         parse_mode="Markdown",
     )
 
@@ -588,6 +653,7 @@ async def async_main():
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(CommandHandler("debug", cmd_debug))
     app.add_handler(CallbackQueryHandler(cb_generate, pattern="^generate$"))
     app.add_handler(CallbackQueryHandler(cb_status,   pattern="^status_"))
 
