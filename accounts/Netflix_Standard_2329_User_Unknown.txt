@@ -1,0 +1,27 @@
+==================================
+PREMIUM ACCOUNT #2329
+
+==================================
+Email: Unknown
+Country: Unknown
+Plan: Standard
+Price: Unknown
+Member Since: Unknown
+Next Billing: Unknown
+Payment: Unknown
+Card: Unknown
+Phone: Unknown
+
+💻 PC Login:
+https://www.netflix.com/browse?nftoken=Bgiqv+vcAxLCAVJ2NCT6W3w+Zc3gPb+/uYLLFLyrsGXdTJGlQXRxeVR0kXsAaxW/rXTz5oqJkq0ZgbAD0UVuaHXka7McbcoKN1k6y+wbjML/TCqTsOzu1NQIVn8Ya0qV8bMgYr5mEyagE7fwzVqiFRRKF6JkfysGpRUg5OuuRE+1spB8AoEeoIcn0j8cAIIzr74F7XEbIQspXpsa+8QIDMvNW4iIcpUgbT5vG26qKAJ8L5HXVDHuBYTKfltMC3kL7UEvn1gRulyEW7RdGAYiDgoMkDXBkX70BKjceBqV
+
+📱 Mobile Login:
+https://www.netflix.com/unsupported?nftoken=Bgiqv+vcAxLCAVJ2NCT6W3w+Zc3gPb+/uYLLFLyrsGXdTJGlQXRxeVR0kXsAaxW/rXTz5oqJkq0ZgbAD0UVuaHXka7McbcoKN1k6y+wbjML/TCqTsOzu1NQIVn8Ya0qV8bMgYr5mEyagE7fwzVqiFRRKF6JkfysGpRUg5OuuRE+1spB8AoEeoIcn0j8cAIIzr74F7XEbIQspXpsa+8QIDMvNW4iIcpUgbT5vG26qKAJ8L5HXVDHuBYTKfltMC3kL7UEvn1gRulyEW7RdGAYiDgoMkDXBkX70BKjceBqV
+
+📺 TV Login:
+https://www.netflix.com/tv8?nftoken=Bgiqv+vcAxLCAVJ2NCT6W3w+Zc3gPb+/uYLLFLyrsGXdTJGlQXRxeVR0kXsAaxW/rXTz5oqJkq0ZgbAD0UVuaHXka7McbcoKN1k6y+wbjML/TCqTsOzu1NQIVn8Ya0qV8bMgYr5mEyagE7fwzVqiFRRKF6JkfysGpRUg5OuuRE+1spB8AoEeoIcn0j8cAIIzr74F7XEbIQspXpsa+8QIDMvNW4iIcpUgbT5vG26qKAJ8L5HXVDHuBYTKfltMC3kL7UEvn1gRulyEW7RdGAYiDgoMkDXBkX70BKjceBqV
+
+# Netscape HTTP Cookie File
+.netflix.com	TRUE	/	FALSE	1806164864	NetflixId	v%3D3%26ct%3DBgjHlOvcAxL4Ap9Ot1dUNIprfwwtTQhxSX9w7GKTNWPPIkD9oxZP4vMTNIQARNTpxMXib3qmL584cKvobx0DORV8yXnzHNLLeienlKuessKPrBWyv5ucL-D-roWrtqeljvA5JFf6OCBp5cy8exANW21RFZhDMckNQjgpl0S6g7kO0sLdhKyrCug4IUmscUa-9G_YorOZ1oPQ8lbmygQA0zLNANsYDMDvsgXGwQztQLOPeaD2nVB4N3-fHo8jIrhOGqM4ic-rux82pHtvOtV1UNGu2stLcMPSSTq_5UIyR7E7YgJGs4iAob_Lv9rhP9hZ3dtE3W3r6OBdp0PwFmVULG0_qFdNxDATu_eS_3JI5R1IlQ0nXyqUDKaPKP4xCpta2Io8KL_57Qqwi-Qkzv7LXcHT1iij5EUqqukQc8sC1XxwjJ-kNPhuc3jArfjie1OLOVanpRCZtBvhOLnyeoxse0eqodmVV1BFsxVKQwcAP_BtUYoj-m3WEWnvir0xCanPP4IYBiIOCgwroe4JCcmBMfKQGlY.%26ch%3DAQEAEAABABRLjEPMuGGaS1h_DAC5Z1Rro2LBQ63Fk5M.
+.netflix.com	TRUE	/	FALSE	1806164864	OptanonConsent	isGpcEnabled=0&datestamp=Wed+Apr+23+2025+10%3A58%3A01+GMT%2B0100+(Hora+de+ver%C3%A3o+da+Europa+Ocidental)&version=202411.1.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=4aa5e10b-6d38-49fa-a61d-9eaedc52d65e&interactionCount=2&isAnonUser=1&landingPath=NotLandingPage&groups=C0001%3A1%2CC0002%3A1%2CC0003%3A1%2CC0004%3A1&AwaitingReconsent=false&intType=1&geolocation=PT%3B15
+.netflix.com	TRUE	/	FALSE	1806164864	SecureNetflixId	v%3D3%26mac%3DAQEAEQABABTSrVHFscm0Vjt6kXs-Hj-wdrSAuqQFghc.%26dt%3D1745402279373
