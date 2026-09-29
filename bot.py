@@ -21,8 +21,8 @@ BASE_DIR     = Path(__file__).parent
 ACCOUNTS_DIR = BASE_DIR / "accounts"
 USED_DIR     = BASE_DIR / "used_accounts"
 
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "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")
 GITHUB_REPO  = os.environ.get("GITHUB_REPO", "alimdarg5-design/netflix-boot")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "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")
 
 PROXY_URL = os.environ.get("PROXY_URL", "")  # Railway: empty = no proxy
 
@@ -38,10 +38,12 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────
-#  STATE
+#  STATE & CACHE
 # ──────────────────────────────────────────────
 # user_state[user_id] = {"waiting_status": bool}
 user_state: dict[int, dict] = {}
+# Session-level tracking: Jo accounts use ho chuke hain unka record
+used_accounts_cache: set[str] = set()
 
 
 # ──────────────────────────────────────────────
@@ -85,46 +87,87 @@ def dev_footer() -> str:
 
 
 # ──────────────────────────────────────────────
-#  HELPERS (REAL-TIME FILE CHECK & AUTO-DELETE)
+#  HELPERS (HYBRID: LOCAL + GITHUB LIVE SCAN)
 # ──────────────────────────────────────────────
-def load_accounts() -> list[Path]:
+def fetch_github_accounts_list() -> list[dict]:
     """
-    Real-time check: accounts/ folder aur root directory dono scan karta hai.
+    GitHub API se real-time accounts scan karta hai.
+    Railway rebuild ka wait kiye baghair live stock mil jata hai.
     """
-    found: list[Path] = []
+    if not GITHUB_REPO:
+        return []
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/accounts"
+    headers = {"User-Agent": "NetflixBot/1.0"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
-    # 1. accounts/ subfolder check
-    if ACCOUNTS_DIR.exists():
-        found.extend(ACCOUNTS_DIR.glob("*.txt"))
-
-    # 2. Root directory check (agar user ne direct root pe upload ki hon)
-    for f in BASE_DIR.glob("*.txt"):
-        if f.name.lower() not in ["requirements.txt", "license.txt", "readme.txt"]:
-            found.append(f)
-
-    # Deduplicate by resolve path & sort (used_accounts folder ko exclude karein)
-    seen = set()
-    unique_files: list[Path] = []
-    for f in sorted(found, key=lambda x: x.name):
-        try:
-            res = f.resolve()
-            if "used_accounts" not in str(res).lower() and res not in seen and f.is_file():
-                seen.add(res)
-                unique_files.append(f)
-        except Exception:
-            pass
-
-    return unique_files
-
-
-def parse_account(path: Path) -> dict | None:
     try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code == 200:
+                items = resp.json()
+                results = []
+                for it in items:
+                    name = it.get("name", "")
+                    if name.endswith(".txt") and name not in used_accounts_cache:
+                        results.append({
+                            "source": "github",
+                            "name": name,
+                            "download_url": it.get("download_url"),
+                            "sha": it.get("sha"),
+                        })
+                return results
+            else:
+                log.warning(f"GitHub contents fetch response {resp.status_code}")
     except Exception as e:
-        log.error(f"File parhne mein masla {path.name}: {e}")
-        return None
+        log.error(f"GitHub API fetch error: {e}")
+    return []
 
-    # Flexible regex for URLs (supports PC Login, PC Link, Mobile Login, Mobile Link, TV Login, TV Link)
+
+def load_accounts() -> list[dict]:
+    """
+    Real-time check:
+    1. Local container ke accounts/ aur root directory scan karta hai.
+    2. GitHub API se bhi scan karta hai (taake agar Railway pe deploy late ho to direct GitHub se mil jaye).
+    """
+    seen_names = set()
+    all_accounts: list[dict] = []
+
+    # 1. Local subfolder check
+    if ACCOUNTS_DIR.exists():
+        for f in sorted(ACCOUNTS_DIR.glob("*.txt")):
+            if f.name not in used_accounts_cache and "used_accounts" not in str(f).lower():
+                seen_names.add(f.name)
+                all_accounts.append({
+                    "source": "local",
+                    "path": f,
+                    "name": f.name,
+                })
+
+    # 2. Local root folder check
+    for f in sorted(BASE_DIR.glob("*.txt")):
+        if f.name.lower() not in ["requirements.txt", "license.txt", "readme.txt"]:
+            if f.name not in used_accounts_cache and f.name not in seen_names:
+                seen_names.add(f.name)
+                all_accounts.append({
+                    "source": "local",
+                    "path": f,
+                    "name": f.name,
+                })
+
+    # 3. GitHub API Live Check (Backup/Direct sync)
+    gh_files = fetch_github_accounts_list()
+    for gh in gh_files:
+        if gh["name"] not in seen_names and gh["name"] not in used_accounts_cache:
+            seen_names.add(gh["name"])
+            all_accounts.append(gh)
+
+    return all_accounts
+
+
+def parse_account_text(text: str, filename: str) -> dict | None:
+    """Account file ke text se login links aur info extract karta hai."""
+    # Matches: PC Login, PC Link, 💻 PC Login, Mobile Login, Mobile Link, TV Login, TV Link
     pc_url     = re.search(r"(?:💻\s*)?PC\s*(?:Login|Link)?\s*[:=\-]?\s*(https?://\S+)", text, re.IGNORECASE)
     mobile_url = re.search(r"(?:📱\s*)?Mobile\s*(?:Login|Link)?\s*[:=\-]?\s*(https?://\S+)", text, re.IGNORECASE)
     tv_url     = re.search(r"(?:📺\s*)?TV\s*(?:Login|Link)?\s*[:=\-]?\s*(https?://\S+)", text, re.IGNORECASE)
@@ -162,7 +205,7 @@ def parse_account(path: Path) -> dict | None:
     plan_match  = re.search(r"Plan:\s*(.+)",  text, re.IGNORECASE)
     email_match = re.search(r"Email:\s*(.+)", text, re.IGNORECASE)
 
-    title = f"Account #{title_match.group(1)}" if title_match else path.stem.replace("_", " ")
+    title = f"Account #{title_match.group(1)}" if title_match else filename.replace(".txt", "").replace("_", " ")
 
     return {
         "title":      title,
@@ -171,77 +214,74 @@ def parse_account(path: Path) -> dict | None:
         "pc_url":     pc_link,
         "mobile_url": mobile_link,
         "tv_url":     tv_link,
-        "file":       path.name,
+        "file":       filename,
     }
 
 
-def delete_from_github(file_path: Path) -> bool:
-    """
-    GitHub repository se file automatically delete karta hai via GitHub REST API.
-    """
-    token = os.environ.get("GITHUB_TOKEN", GITHUB_TOKEN)
-    repo  = os.environ.get("GITHUB_REPO", GITHUB_REPO)
-    if not token or not repo:
+def delete_from_github(filename: str, sha: str | None = None) -> bool:
+    """GitHub repository se file delete karta hai."""
+    if not GITHUB_TOKEN or not GITHUB_REPO:
         return False
 
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "NetflixBot/1.0",
     }
 
-    # accounts/filename.txt ya direct filename.txt dono check karega
-    candidates = [f"accounts/{file_path.name}", file_path.name]
+    candidates = [f"accounts/{filename}", filename]
     for rel_path in candidates:
-        url = f"https://api.github.com/repos/{repo}/contents/{rel_path}"
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{rel_path}"
         try:
             with httpx.Client(timeout=10.0) as client:
-                res = client.get(url, headers=headers)
-                if res.status_code == 200:
-                    sha = res.json().get("sha")
+                target_sha = sha
+                if not target_sha:
+                    res = client.get(url, headers=headers)
+                    if res.status_code == 200:
+                        target_sha = res.json().get("sha")
+
+                if target_sha:
                     del_res = client.request(
                         "DELETE",
                         url,
                         headers=headers,
                         json={
-                            "message": f"🤖 Auto-delete used account: {file_path.name}",
-                            "sha": sha,
+                            "message": f"🤖 Auto-delete used account: {filename}",
+                            "sha": target_sha,
                         },
                     )
                     if del_res.status_code in [200, 204]:
                         log.info(f"✅ GitHub se file auto-delete ho gayi: {rel_path}")
                         return True
-                    else:
-                        log.warning(f"⚠️ GitHub delete error ({del_res.status_code}): {del_res.text}")
         except Exception as e:
-            log.error(f"GitHub delete API call error: {e}")
+            log.error(f"GitHub delete error: {e}")
     return False
 
 
-def delete_account_file(path: Path):
-    """
-    File generate hone ke baad:
-    1. GitHub repository se auto-delete karta hai.
-    2. Local mein used_accounts/ folder mein move karta hai (taake dobara pick na ho).
-    """
-    # 1. GitHub API se delete
-    delete_from_github(path)
+def delete_account_file(item: dict):
+    """File generate hone ke baad local aur GitHub dono se remove karta hai."""
+    name = item["name"]
+    used_accounts_cache.add(name)
 
-    # 2. Local move to used_accounts/
-    try:
-        import shutil
-        USED_DIR.mkdir(parents=True, exist_ok=True)
-        dest = USED_DIR / path.name
-        if path.exists():
-            shutil.move(str(path), str(dest))
-            log.info(f"✅ File moved to used_accounts: {path.name}")
-    except Exception as e:
-        log.warning(f"File move fail hua, direct unlink: {e}")
+    # 1. Delete from GitHub
+    delete_from_github(name, item.get("sha"))
+
+    # 2. Agar local file hai to used_accounts/ mein move karein
+    if item.get("source") == "local":
+        path: Path = item["path"]
         try:
+            import shutil
+            USED_DIR.mkdir(parents=True, exist_ok=True)
+            dest = USED_DIR / path.name
             if path.exists():
-                path.unlink()
-        except Exception:
-            pass
+                shutil.move(str(path), str(dest))
+                log.info(f"✅ File moved to used_accounts: {path.name}")
+        except Exception as e:
+            try:
+                if path.exists():
+                    path.unlink()
+            except Exception:
+                pass
 
 
 def get_user_state(user_id: int) -> dict:
@@ -372,21 +412,39 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # ── 4. Find valid account & Auto-delete ─────────────
     acc = None
-    target_path = None
+    target_item = None
 
     while files:
         candidate = files.pop(0)
-        parsed = parse_account(candidate)
-        if parsed:
-            acc = parsed
-            target_path = candidate
-            break
-        else:
-            # Corrupted / invalid file — remove so it doesn't block future generations
-            log.warning(f"Skipping and deleting invalid file: {candidate.name}")
-            delete_account_file(candidate)
+        # Fetch file text (local ya github)
+        text_content = ""
+        if candidate.get("source") == "local":
+            try:
+                text_content = candidate["path"].read_text(encoding="utf-8", errors="ignore")
+            except Exception as e:
+                log.error(f"Local read error: {e}")
+        elif candidate.get("source") == "github":
+            try:
+                dl_url = candidate.get("download_url")
+                if dl_url:
+                    with httpx.Client(timeout=10.0) as client:
+                        resp = client.get(dl_url)
+                        if resp.status_code == 200:
+                            text_content = resp.text
+            except Exception as e:
+                log.error(f"GitHub fetch error: {e}")
 
-    if not acc or not target_path:
+        if text_content:
+            parsed = parse_account_text(text_content, candidate["name"])
+            if parsed:
+                acc = parsed
+                target_item = candidate
+                break
+
+        # Agar corrupt/invalid hai to remove karein
+        delete_account_file(candidate)
+
+    if not acc or not target_item:
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=anim_id,
@@ -400,7 +458,7 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     # Delete the used file immediately so it NEVER repeats!
-    delete_account_file(target_path)
+    delete_account_file(target_item)
 
     # Real-time stock count remaining after this generation
     remaining_stock = len(load_accounts())
