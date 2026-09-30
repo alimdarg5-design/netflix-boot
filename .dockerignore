@@ -7,4 +7,4 @@ venv/
 accounts/
 netflix_accounts/
 used_accounts/
-*.txt
+.git/
