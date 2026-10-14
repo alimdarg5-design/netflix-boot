@@ -193,6 +193,15 @@ def esc(text) -> str:
     return re.sub(r"([_*`\[\]])", r"\\\1", str(text))
 
 
+# ── Colored buttons (Bot API 9.4+ style: primary=blue, success=green, danger=red) ──
+def ibtn(text: str, style: str = "", **kwargs) -> InlineKeyboardButton:
+    """InlineKeyboardButton with optional color style. PTB 21.6 supports it via api_kwargs."""
+    if style:
+        kwargs.setdefault("api_kwargs", {})
+        kwargs["api_kwargs"]["style"] = style
+    return InlineKeyboardButton(text, **kwargs)
+
+
 def get_state(user_id: int) -> dict:
     if user_id not in user_state:
         user_state[user_id] = {"waiting_status": False}
@@ -256,7 +265,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         + footer(),
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🎁 Generate VIP Account", callback_data="generate")]]
+            [[ibtn("🎁 Generate VIP Account", style="primary", callback_data="generate")]]
         ),
     )
 
@@ -383,17 +392,18 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     state["waiting_status"] = True
 
     # Build login buttons (sirf valid http/https URLs — warna Telegram reject karta hai)
+    # PC = green, TV = purple-ish blue, Mobile = orange; feedback = green/red.
     login_btns: list[list] = []
-    for label, key in (("💻  PC Login", "pc_url"),
-                       ("📺  TV Login", "tv_url"),
-                       ("📱  Mobile Login", "mob_url")):
+    for label, key, style in (("💻  PC Login",     "pc_url",  "success"),
+                              ("📺  TV Login",      "tv_url",  "primary"),
+                              ("📱  Mobile Login",  "mob_url", "danger")):
         url = (acc_data.get(key) or "").strip()
         if url.startswith(("http://", "https://")):
-            login_btns.append([InlineKeyboardButton(label, url=url)])
+            login_btns.append([ibtn(label, style=style, url=url)])
 
     login_btns.append([
-        InlineKeyboardButton("✅ Working",     callback_data="status_working"),
-        InlineKeyboardButton("❌ Not Working", callback_data="status_notworking"),
+        ibtn("✅ Working",     style="success", callback_data="status_working"),
+        ibtn("❌ Not Working", style="danger",  callback_data="status_notworking"),
     ])
 
     acc_text = (
@@ -449,7 +459,7 @@ async def cb_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         + footer(),
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🎁 Generate Next VIP Account", callback_data="generate")]]
+            [[ibtn("🎁 Generate Next VIP Account", style="primary", callback_data="generate")]]
         ),
     )
 
