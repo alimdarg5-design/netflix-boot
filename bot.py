@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import asyncio
 import logging
 import httpx
@@ -11,6 +12,13 @@ from telegram.ext import (
     ContextTypes,
 )
 from telegram.request import HTTPXRequest
+
+# Windows console (cp1252) emoji log nahi kar sakta — UTF-8 force karo
+for _stream in ("stdout", "stderr"):
+    try:
+        getattr(sys, _stream).reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # ════════════════════════════════════════════════════════════════
 #  CONFIG  —  Railway Variables se load hota hai
@@ -38,6 +46,10 @@ log = logging.getLogger(__name__)
 # ════════════════════════════════════════════════════════════════
 user_state:  dict[int, dict] = {}   # per-user session
 used_files:  set[str]        = set() # files served this process run
+
+# Account select + GitHub delete ko serialize karta hai so do users ko
+# ek hi account na mile (race condition guard).
+generate_lock = asyncio.Lock()
 
 
 # ════════════════════════════════════════════════════════════════
@@ -174,6 +186,13 @@ def footer() -> str:
     return f"\n\n{DIVIDER}\n🛡 *{BOT_NAME}*\n👨‍💻 *Dev:* `{DEVELOPER}`"
 
 
+def esc(text) -> str:
+    """Legacy Markdown reserved chars ko escape karta hai (parse crash se bachne ke liye)."""
+    if text is None:
+        return ""
+    return re.sub(r"([_*`\[\]])", r"\\\1", str(text))
+
+
 def get_state(user_id: int) -> dict:
     if user_id not in user_state:
         user_state[user_id] = {"waiting_status": False}
@@ -227,7 +246,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        f"👋 *Salam {user.first_name}!*\n\n"
+        f"👋 *Salam {esc(user.first_name)}!*\n\n"
         f"🎬 *{VIP_TAG} Netflix Bot mein Khush Aamdeed!*\n\n"
         f"{DIVIDER}\n"
         f"📦 *Available Stock:* `{stock}` VIP account(s)\n"
@@ -315,24 +334,38 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"✨ *{VIP_TAG} Account Ready!*",
     ])
 
-    # Find a valid parseable account
+    # Select + delete ek hi lock mein — concurrent users ko alag account mile
     acc_data  = None
     used_item = None
 
-    for item in accounts:
-        raw = download_file(item["download_url"])
-        if not raw:
-            used_files.add(item["name"])
-            continue
-        parsed = parse_account(raw, item["name"])
-        if parsed:
-            acc_data  = parsed
-            used_item = item
-            break
-        else:
-            # Corrupt / unreadable file → skip & delete
-            used_files.add(item["name"])
-            github_delete(item["name"], item["sha"])
+    async with generate_lock:
+        for item in fetch_accounts():
+            if item["name"] in used_files:
+                continue
+
+            download_url = item.get("download_url")
+            if not download_url:
+                used_files.add(item["name"])
+                continue
+
+            raw = download_file(download_url)
+            if not raw:
+                used_files.add(item["name"])
+                continue
+
+            parsed = parse_account(raw, item["name"])
+            if parsed:
+                # Pehle GitHub se delete, tab hi deliver karo (warna dead link)
+                if github_delete(item["name"], item["sha"]):
+                    used_files.add(item["name"])
+                    acc_data  = parsed
+                    used_item = item
+                    break
+                log.warning(f"Delete fail — skip: {item['name']}")
+            else:
+                # Corrupt / unreadable file → skip & delete
+                used_files.add(item["name"])
+                github_delete(item["name"], item["sha"])
 
     if not acc_data or not used_item:
         await bot.edit_message_text(
@@ -346,21 +379,17 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Mark used + permanent GitHub delete
-    used_files.add(used_item["name"])
-    github_delete(used_item["name"], used_item["sha"])
-
     remaining = len(fetch_accounts())
     state["waiting_status"] = True
 
-    # Build login buttons
+    # Build login buttons (sirf valid http/https URLs — warna Telegram reject karta hai)
     login_btns: list[list] = []
-    if acc_data["pc_url"]:
-        login_btns.append([InlineKeyboardButton("💻  PC Login",     url=acc_data["pc_url"])])
-    if acc_data["tv_url"]:
-        login_btns.append([InlineKeyboardButton("📺  TV Login",     url=acc_data["tv_url"])])
-    if acc_data["mob_url"]:
-        login_btns.append([InlineKeyboardButton("📱  Mobile Login", url=acc_data["mob_url"])])
+    for label, key in (("💻  PC Login", "pc_url"),
+                       ("📺  TV Login", "tv_url"),
+                       ("📱  Mobile Login", "mob_url")):
+        url = (acc_data.get(key) or "").strip()
+        if url.startswith(("http://", "https://")):
+            login_btns.append([InlineKeyboardButton(label, url=url)])
 
     login_btns.append([
         InlineKeyboardButton("✅ Working",     callback_data="status_working"),
@@ -370,9 +399,9 @@ async def cb_generate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     acc_text = (
         f"🎉 *Netflix VIP Account*\n"
         f"{DIVIDER}\n"
-        f"🏷  *Title:* `{acc_data['title']}`\n"
-        f"📋  *Plan:*  `{acc_data['plan']}`\n"
-        f"📧  *Email:* `{acc_data['email']}`\n"
+        f"🏷  *Title:* `{esc(acc_data['title'])}`\n"
+        f"📋  *Plan:*  `{esc(acc_data['plan'])}`\n"
+        f"📧  *Email:* `{esc(acc_data['email'])}`\n"
         f"{DIVIDER}\n\n"
         f"🔐 *Login ke liye neeche button dabao:*\n\n"
         f"📦 *Remaining Stock:* `{remaining}` account(s)"
